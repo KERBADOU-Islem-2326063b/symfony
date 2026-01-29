@@ -1,0 +1,49 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Inscription{% endblock %}
+
+{% block body %}
+    <div class="container d-flex justify-content-center align-items-center min-vh-100">
+        <div class="card shadow-lg p-4 login-card">
+            <div class="card-body">
+                <h1 class="h4 text-center mb-4">Inscription</h1>
+
+                {% for flash_error in app.flashes('verify_email_error') %}
+                    <div class="alert alert-danger text-center" role="alert">
+                        {{ flash_error }}
+                    </div>
+                {% endfor %}
+
+                {{ form_errors(registrationForm) }}
+
+                {{ form_start(registrationForm) }}
+                <div class="mb-3">
+                    {{ form_row(registrationForm.email, {
+                        attr: { class: 'form-control form-control-lg' }
+                    }) }}
+                </div>
+
+                <div class="mb-3">
+                    {{ form_row(registrationForm.plainPassword, {
+                        label: 'Mot de passe',
+                        attr: { class: 'form-control form-control-lg' }
+                    }) }}
+                </div>
+
+                <div class="mb-4 form-check">
+                    {{ form_row(registrationForm.agreeTerms, {
+                        label_attr: { class: 'form-check-label' },
+                        row_attr: { class: 'form-check' }
+                    }) }}
+                </div>
+
+                <div class="d-grid">
+                    <button type="submit" class="btn btn-primary btn-lg">
+                        Créer le compte
+                    </button>
+                </div>
+                {{ form_end(registrationForm) }}
+            </div>
+        </div>
+    </div>
+{% endblock %}
