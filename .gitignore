@@ -15,3 +15,8 @@
 npm-debug.log
 yarn-error.log
 ###< symfony/webpack-encore-bundle ###
+
+### Ajouts manuels
+.env
+.env.dev
+.idea/
