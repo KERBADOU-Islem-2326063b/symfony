@@ -12,3 +12,5 @@
 .env
 .env.dev
 .idea/
+.editorconfig
+node_modules/
