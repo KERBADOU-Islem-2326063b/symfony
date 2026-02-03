@@ -138,18 +138,6 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         return $data;
     }
 
-    public function getUsername(): ?string
-    {
-        return $this->username;
-    }
-
-    public function setUsername(string $username): static
-    {
-        $this->username = $username;
-
-        return $this;
-    }
-
     public function getPlainPassword(): ?string
     {
         return $this->plainPassword;
