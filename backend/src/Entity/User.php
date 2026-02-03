@@ -34,7 +34,6 @@ use Symfony\Component\Serializer\Attribute\Groups;
     denormalizationContext: ['groups' => ['user:write']],
 )]
 #[UniqueEntity(fields: ['email'], message: 'There is already an account with this email', groups: ['user:create'])]
-#[UniqueEntity(fields: ['username'], message: 'There is already an account with this username', groups: ['user:create'])]
 class User implements UserInterface, PasswordAuthenticatedUserInterface
 {
     #[ORM\Id]
@@ -51,6 +50,8 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
      * @var list<string> The user roles
      */
     #[ORM\Column]
+    #[Groups(['user:read', 'user:write'])]
+    #[Assert\NotBlank]
     private array $roles = [];
 
     /**
@@ -58,11 +59,6 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
      */
     #[ORM\Column]
     private ?string $password = null;
-
-    #[ORM\Column(length: 255)]
-    #[Groups(['user:read', 'user:write'])]
-    #[Assert\NotBlank]
-    private ?string $username = null;
 
     #[Groups(['user:write'])]
     private ?string $plainPassword = null;
