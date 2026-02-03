@@ -42,12 +42,16 @@ class Question
      * @var Collection<int, Response>
      */
     #[ORM\OneToMany(targetEntity: Response::class, mappedBy: 'question', cascade: ['persist'])]
-    #[Groups(['question:read', 'question:write'])]
+    #[Groups(['question:read', 'question:write', 'quiz:read', 'quiz:write'])]
     private Collection $possible_responses;
 
     #[ORM\Column(length: 255)]
-    #[Groups(['question:read', 'question:write'])]
+    #[Groups(['question:read', 'question:write', 'quiz:read', 'quiz:write'])]
     private ?string $content = null;
+
+    #[ORM\ManyToOne(inversedBy: 'questions')]
+    #[Groups(['question:read', 'question:write'])]
+    private ?Quiz $quiz = null;
 
     public function __construct()
     {
@@ -97,6 +101,18 @@ class Question
     public function setContent(string $content): static
     {
         $this->content = $content;
+
+        return $this;
+    }
+
+    public function getQuiz(): ?Quiz
+    {
+        return $this->quiz;
+    }
+
+    public function setQuiz(?Quiz $quiz): static
+    {
+        $this->quiz = $quiz;
 
         return $this;
     }

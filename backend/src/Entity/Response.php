@@ -34,14 +34,14 @@ class Response
     private ?int $id = null;
 
     #[ORM\Column(length: 255)]
-    #[Groups(['response:read', 'response:write', 'question:write', 'question:read'])]
+    #[Groups(['response:read', 'response:write', 'question:write', 'question:read', 'quiz:read', 'quiz:write'])]
     private ?string $content = null;
 
-    #[ORM\ManyToOne(targetEntity: Question::class,inversedBy: 'possible_responses')]
+    #[ORM\ManyToOne(targetEntity: Question::class, inversedBy: 'possible_responses')]
     private ?Question $question = null;
 
     #[ORM\Column]
-    #[Groups(['response:write', 'question:write'])]
+    #[Groups(['response:write', 'question:write', 'quiz:read', 'quiz:write'])]
     private ?bool $is_correct = null;
 
     public function getId(): ?int
