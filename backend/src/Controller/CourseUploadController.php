@@ -9,7 +9,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 
-final class UploadController extends AbstractController
+final class CourseUploadController extends AbstractController
 {
     const string PATH_TO_SAVE_FILES = __DIR__.'/../../var/uploads';
 
