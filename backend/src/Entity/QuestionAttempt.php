@@ -34,15 +34,15 @@ class QuestionAttempt
     private ?int $id = null;
 
     #[ORM\Column]
-    #[Groups(['questionAttempt:read', 'questionAttempt:write'])]
+    #[Groups(['questionAttempt:read', 'questionAttempt:write', 'quizAttempt:read', 'quizAttempt:write'])]
     private ?bool $answeredCorrectly = null;
 
     #[ORM\ManyToOne]
-    #[Groups(['questionAttempt:read', 'questionAttempt:write'])]
+    #[Groups(['questionAttempt:read', 'questionAttempt:write', 'quizAttempt:read', 'quizAttempt:write'])]
     private ?Question $question = null;
 
     #[ORM\ManyToOne(inversedBy: 'questionAttempts')]
-    #[Groups(['questionAttempt:read', 'questionAttempt:write', 'quizAttempt:read', 'quizAttempt:write'])]
+    #[Groups(['questionAttempt:read', 'questionAttempt:write'])]
     private ?QuizAttempt $quizAttempt = null;
 
     public function getId(): ?int
