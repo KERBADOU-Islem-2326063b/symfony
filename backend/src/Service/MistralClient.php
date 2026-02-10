@@ -1,0 +1,103 @@
+<?php
+
+namespace App\Service;
+
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Contracts\HttpClient\HttpClientInterface;
+
+class MistralClient
+{
+    private const API_URL = 'https://api.mistral.ai/v1/chat/completions';
+    private const DEFAULT_MODEL = 'mistral-small-latest';
+
+    public function __construct(
+        private readonly HttpClientInterface $httpClient,
+        #[Autowire(env: 'MISTRAL_API_KEY')]
+        private readonly string $apiKey,
+    ) {
+    }
+
+    /**
+     * Génère un QCM à partir d'un texte (transcription vidéo ou texte de document).
+     *
+     * @return array<mixed>
+     */
+    public function generateQuizFromContent(string $content, string $sourceName, string $sourceType): array
+    {
+        $prompt = $this->buildPrompt($content, $sourceName, $sourceType);
+
+        $response = $this->httpClient->request('POST', self::API_URL, [
+            'headers' => [
+                'Authorization' => 'Bearer ' . $this->apiKey,
+                'Content-Type' => 'application/json',
+            ],
+            'json' => [
+                'model' => self::DEFAULT_MODEL,
+                'messages' => [
+                    [
+                        'role' => 'system',
+                        'content' => 'Tu es un générateur de QCM en français. '
+                            . 'Tu produis du JSON strict, sans texte autour.',
+                    ],
+                    [
+                        'role' => 'user',
+                        'content' => $prompt,
+                    ],
+                ],
+                'temperature' => 0.4,
+            ],
+        ]);
+
+        $data = $response->toArray(false);
+
+        $rawContent = $data['choices'][0]['message']['content'] ?? '';
+
+        $decoded = json_decode($rawContent, true);
+        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+            return $decoded;
+        }
+
+        return [
+            'raw' => $rawContent,
+            'error' => 'Le modèle n\'a pas renvoyé un JSON valide. Vérifiez le contenu brut.',
+        ];
+    }
+
+    private function buildPrompt(string $content, string $sourceName, string $sourceType): string
+    {
+        return sprintf(
+            <<<PROMPT
+Génère un QCM en français basé sur le contenu suivant, provenant d'un(e) %s nommé(e) "%s".
+
+CONTENU :
+---
+%s
+---
+
+Je veux le résultat au format JSON STRICT, sans aucun texte avant ou après, avec la structure suivante :
+{
+  "title": "Titre du QCM",
+  "questions": [
+    {
+      "question": "Texte de la question",
+      "choices": [
+        "Choix A",
+        "Choix B",
+        "Choix C",
+        "Choix D"
+      ],
+      "answer_index": 0,
+      "explanation": "Explication courte de la bonne réponse"
+    }
+  ]
+}
+
+Produit entre 5 et 10 questions.
+PROMPT,
+            $sourceType,
+            $sourceName,
+            $content
+        );
+    }
+}
+
