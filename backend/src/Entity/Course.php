@@ -9,7 +9,7 @@ use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Patch;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Put;
-use App\Controller\UploadController;
+use App\Controller\CourseUploadController;
 use App\Repository\CourseRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
@@ -22,7 +22,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
         new Post(
             uriTemplate: '/courses',
             inputFormats: ['multipart' => ['multipart/form-data']],
-            controller: UploadController::class,
+            controller: CourseUploadController::class,
             deserialize: false,
         ),
         new Post(),
