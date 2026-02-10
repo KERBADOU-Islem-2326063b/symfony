@@ -55,6 +55,10 @@ class Quiz
     #[ORM\OneToMany(targetEntity: QuizAttempt::class, mappedBy: 'quiz', orphanRemoval: true)]
     private Collection $quizAttempts;
 
+    #[ORM\ManyToOne(inversedBy: 'quiz')]
+    #[Groups(['quiz:read', 'quiz:write'])]
+    private ?Course $course = null;
+
     public function __construct()
     {
         $this->questions = new ArrayCollection();
@@ -146,6 +150,18 @@ class Quiz
                 $quizAttempt->setQuiz(null);
             }
         }
+
+        return $this;
+    }
+
+    public function getCourse(): ?Course
+    {
+        return $this->course;
+    }
+
+    public function setCourse(?Course $course): static
+    {
+        $this->course = $course;
 
         return $this;
     }
