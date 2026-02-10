@@ -119,10 +119,27 @@ function Home() {
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return String(value);
     return d.toLocaleDateString();
-  };
+  };  
 
   const extractIdFromResource = (resource) => {
     if (!resource) return null;
+
+    // Cas 1: valeur scalaire directe (number ou string représentant un id ou une IRI)
+    if (typeof resource === "number") {
+      return String(resource);
+    }
+    if (typeof resource === "string") {
+      // "5" -> "5"
+      if (/^\d+$/.test(resource)) {
+        return resource;
+      }
+      // "/api/users/5" -> "5"
+      const parts = resource.split("/");
+      const last = parts[parts.length - 1];
+      return last && /^\d+$/.test(last) ? last : null;
+    }
+
+    // Cas 2: objet JSON
     if (typeof resource.id !== "undefined" && resource.id !== null) {
       return String(resource.id);
     }
@@ -324,11 +341,27 @@ function Home() {
       const qId = q.id || extractIdFromResource(q);
       const selectedResponseId = answers[qId];
       const responses = q.possible_responses || q.possibleResponses || [];
+
       const selectedResponse = responses.find((r) => {
         const rId = r.id || extractIdFromResource(r);
         return String(rId) === String(selectedResponseId);
       });
-      const isCorrect = selectedResponse ? !!selectedResponse.is_correct : false;
+
+      // On tolère les deux formats de propriété: is_correct (backend) ou isCorrect (au cas où)
+      const isCorrectFlag =
+        selectedResponse &&
+        (selectedResponse.is_correct === true ||
+          selectedResponse.isCorrect === true);
+
+      const isCorrect = !!isCorrectFlag;
+
+      // Logs de debug pour une question
+      console.log("[Quiz] question", qId, {
+        selectedResponseId,
+        responses,
+        selectedResponse,
+        isCorrect,
+      });
       if (isCorrect) correctCount += 1;
 
       questionPayloads.push({
@@ -398,6 +431,9 @@ function Home() {
         `Vos réponses ont été enregistrées. Résultat : ${noteSur20}/20.`
       );
       setSubmitLoading(false);
+
+      // On remonte vers le haut pour voir le message et la note
+      window.scrollTo({ top: 0, behavior: "smooth" });
 
       // On recharge la liste des tentatives pour mettre à jour le tableau
       loadHomeData();
