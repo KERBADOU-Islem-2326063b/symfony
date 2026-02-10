@@ -41,7 +41,7 @@ class Response
     private ?Question $question = null;
 
     #[ORM\Column]
-    #[Groups(['response:write', 'question:write', 'quiz:read', 'quiz:write'])]
+    #[Groups(['response:read', 'response:write', 'question:read', 'question:write', 'quiz:read', 'quiz:write'])]
     private ?bool $is_correct = null;
 
     public function getId(): ?int
@@ -73,7 +73,7 @@ class Response
         return $this;
     }
 
-    public function isCorrect(): ?bool
+    public function getIsCorrect(): ?bool
     {
         return $this->is_correct;
     }
