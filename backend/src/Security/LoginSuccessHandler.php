@@ -16,6 +16,7 @@ class LoginSuccessHandler implements AuthenticationSuccessHandlerInterface
             'message' => 'successfully logged in',
             'user' => $token->getUser()->getUserIdentifier(),
             'roles' => $token->getUser()->getRoles(),
+            'id' => $token->getUser()->getId(),
         ], Response::HTTP_OK);
     }
 }
