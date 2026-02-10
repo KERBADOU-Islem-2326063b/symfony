@@ -3,13 +3,38 @@
 namespace App\Entity;
 
 use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Delete;
+use ApiPlatform\Metadata\Get;
+use ApiPlatform\Metadata\GetCollection;
+use ApiPlatform\Metadata\Patch;
+use ApiPlatform\Metadata\Post;
+use ApiPlatform\Metadata\Put;
+use App\Controller\UploadController;
 use App\Repository\CourseRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
+use Symfony\Component\Serializer\Attribute\Groups;
 
 #[ORM\Entity(repositoryClass: CourseRepository::class)]
-#[ApiResource]
+#[ApiResource(
+    operations: [
+        new Post(
+            uriTemplate: '/courses',
+            inputFormats: ['multipart' => ['multipart/form-data']],
+            controller: UploadController::class,
+            deserialize: false,
+        ),
+        new Post(),
+        new GetCollection(),
+        new Get(),
+        new Put(),
+        new Patch(),
+        new Delete(),
+    ],
+    normalizationContext: ['groups' => 'course:read'],
+    denormalizationContext: ['groups' => 'course:write'],
+)]
 class Course
 {
     #[ORM\Id]
@@ -18,10 +43,11 @@ class Course
     private ?int $id = null;
 
     #[ORM\Column(length: 255)]
+    #[Groups(['course:read', 'course:write'])]
     private ?string $name = null;
 
     #[ORM\Column(length: 255)]
-    private ?string $file_name = null;
+    private ?string $fileName = null;
 
     /**
      * @var Collection<int, Quiz>
@@ -53,12 +79,12 @@ class Course
 
     public function getFileName(): ?string
     {
-        return $this->file_name;
+        return $this->fileName;
     }
 
-    public function setFileName(string $file_name): static
+    public function setFileName(string $fileName): static
     {
-        $this->file_name = $file_name;
+        $this->fileName = $fileName;
 
         return $this;
     }
