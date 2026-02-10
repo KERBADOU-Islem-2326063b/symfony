@@ -5,11 +5,14 @@ namespace App\Controller;
 use App\Entity\Quiz;
 use App\Entity\Question;
 use App\Entity\Response as QuizResponse;
+use App\Entity\User;
+use App\Entity\Course;
 use App\Service\DocumentTextExtractor;
 use App\Service\MistralClient;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\KernelInterface;
 use Symfony\Component\Routing\Attribute\Route;
@@ -42,7 +45,7 @@ class UploadController extends AbstractController
     }
 
     #[Route('/quiz/document/{filename}', name: 'quiz_from_document', methods: ['POST'])]
-    public function generateQuizFromDocument(string $filename): JsonResponse
+    public function generateQuizFromDocument(string $filename, Request $request): JsonResponse
     {
         $filePath = $this->getFilePath($filename, self::DOCUMENT_EXTENSIONS);
         if ($filePath === null) {
@@ -50,6 +53,12 @@ class UploadController extends AbstractController
                 ['error' => 'Document introuvable ou extension non supportée.'],
                 Response::HTTP_NOT_FOUND
             );
+        }
+
+        try {
+            $payload = json_decode((string) $request->getContent(), true, 512, \JSON_THROW_ON_ERROR);
+        } catch (\Throwable) {
+            $payload = [];
         }
 
         try {
@@ -75,14 +84,51 @@ class UploadController extends AbstractController
 
         // Création du Quiz et de ses Questions/Réponses associées
         $quiz = new Quiz();
-        $quizTitle = \is_string($quizData['title'] ?? null) && $quizData['title'] !== ''
-            ? $quizData['title']
-            : sprintf('QCM généré à partir de %s', $filename);
+        // On force un titre standardisé qui contient toujours le nom du fichier,
+        // afin de pouvoir le retrouver facilement côté frontend.
+        $quizTitle = sprintf('QCM généré à partir de %s', $filename);
         $quiz->setTitle($quizTitle);
 
-        $user = $this->getUser();
-        if ($user !== null && $user instanceof \App\Entity\User) {
-            $quiz->setTeacher($user);
+        // Association du teacher : on privilégie l'IRI envoyé en payload,
+        // sinon on retombe sur l'utilisateur authentifié.
+        $teacherIri = \is_array($payload) ? ($payload['teacher'] ?? null) : null;
+        $teacher = null;
+        if (\is_string($teacherIri) && $teacherIri !== '') {
+            $teacherId = $this->extractIdFromIriOrScalar($teacherIri);
+            if ($teacherId !== null) {
+                $teacher = $this->entityManager->getRepository(User::class)->find($teacherId);
+            }
+        }
+
+        if ($teacher === null) {
+            $user = $this->getUser();
+            if ($user !== null && $user instanceof User) {
+                $teacher = $user;
+            }
+        }
+
+        if ($teacher instanceof User) {
+            $quiz->setTeacher($teacher);
+        }
+
+        // Association éventuelle du cours :
+        // 1) si une IRI de course est envoyée
+        // 2) sinon, tentative par correspondance sur Course.file_name == $filename
+        $course = null;
+        $courseIri = \is_array($payload) ? ($payload['course'] ?? null) : null;
+        if (\is_string($courseIri) && $courseIri !== '') {
+            $courseId = $this->extractIdFromIriOrScalar($courseIri);
+            if ($courseId !== null) {
+                $course = $this->entityManager->getRepository(Course::class)->find($courseId);
+            }
+        }
+        if ($course === null) {
+            $course = $this->entityManager
+                ->getRepository(Course::class)
+                ->findOneBy(['file_name' => $filename]);
+        }
+        if ($course instanceof Course) {
+            $quiz->setCourse($course);
         }
 
         foreach ($quizData['questions'] as $questionData) {
@@ -195,6 +241,30 @@ class UploadController extends AbstractController
         }
 
         return $fullPath;
+    }
+
+    /**
+     * Extrait un identifiant à partir d'une IRI Api Platform ou d'un scalaire simple.
+     *
+     * @param mixed $value
+     */
+    private function extractIdFromIriOrScalar(mixed $value): ?int
+    {
+        if (\is_int($value)) {
+            return $value;
+        }
+        if (\is_string($value) && $value !== '') {
+            if (\ctype_digit($value)) {
+                return (int) $value;
+            }
+            $parts = \explode('/', $value);
+            $last = \end($parts);
+            if ($last !== false && $last !== '' && \ctype_digit($last)) {
+                return (int) $last;
+            }
+        }
+
+        return null;
     }
 }
 

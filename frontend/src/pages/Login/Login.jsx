@@ -15,7 +15,7 @@ function Login() {
     const res = await login(email, password);
 
     if (res.success) {
-      loginSuccess(res.user, res.roles);
+      loginSuccess(res.user, res.roles, res.id);
       navigate("/");
     } else {
       if (res.status === 401) {

@@ -1,4 +1,4 @@
-const API_URL = "http://localhost:8000/api";
+export const API_URL = "http://localhost:8000/api";
 
 export async function login(email, password) {
   try {
@@ -21,9 +21,26 @@ export async function login(email, password) {
     }
 
     if (res.ok) {
-      const user = (json && (json.user || json)) || null;
-      const roles = (json && json.roles) || (user && user.roles) || [];
-      return { success: true, user, roles };
+      const roles = (json && json.roles) || [];
+
+      // Notre LoginSuccessHandler renvoie: { user: "<email>", roles: [...], id: <int> }
+      // On normalise en objet user pour que le frontend puisse stocker userId.
+      let user = null;
+      if (json && typeof json === "object") {
+        if (json.user && typeof json.user === "object") {
+          user = json.user;
+        } else if (typeof json.user === "string") {
+          user = {
+            id: json.id ?? null,
+            email: json.user,
+            roles
+          };
+        } else if (typeof json.id !== "undefined") {
+          user = { id: json.id, email, roles };
+        }
+      }
+
+      return { success: true, user, roles, id: json.id };
     }
 
     return {

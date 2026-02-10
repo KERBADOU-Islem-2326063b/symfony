@@ -52,9 +52,27 @@ class MistralClient
 
         $rawContent = $data['choices'][0]['message']['content'] ?? '';
 
-        $decoded = json_decode($rawContent, true);
+        // Nettoyage : certains modèles renvoient le JSON entouré de ``` ou ```json
+        $normalized = trim($rawContent);
+        if (str_starts_with($normalized, '```')) {
+            // Supprime la première ligne de fence (``` ou ```json)
+            $normalized = preg_replace('/^```[a-zA-Z0-9]*\s*/', '', $normalized);
+            // Supprime le fence de fin éventuel
+            $normalized = preg_replace('/```$/', '', trim($normalized));
+        }
+
+        // Tentative principale de décodage
+        $decoded = json_decode($normalized, true);
         if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
             return $decoded;
+        }
+
+        // Dernier recours : essayer d'extraire le premier bloc JSON { ... }
+        if (preg_match('/\{.*\}/s', $normalized, $m)) {
+            $fallback = json_decode($m[0], true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($fallback)) {
+                return $fallback;
+            }
         }
 
         return [

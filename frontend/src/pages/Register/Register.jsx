@@ -33,7 +33,7 @@ function Register() {
     });
 
     if (res.success) {
-      loginSuccess(res.user, res.user && res.user.roles);
+      loginSuccess(res.user, res.roles || (res.user && res.user.roles), res.id);
       navigate("/");
     } else {
       setError(res.message || "Erreur lors de l'inscription");
