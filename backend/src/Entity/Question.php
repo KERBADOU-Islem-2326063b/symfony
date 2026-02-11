@@ -42,11 +42,11 @@ class Question
      * @var Collection<int, Response>
      */
     #[ORM\OneToMany(targetEntity: Response::class, mappedBy: 'question', cascade: ['persist'])]
-    #[Groups(['question:read', 'question:write', 'quiz:read', 'quiz:write'])]
+    #[Groups(['question:read', 'question:write', 'quiz:read', 'quiz:write', 'questionAttempt:read', 'quizAttempt:read'])]
     private Collection $possible_responses;
 
     #[ORM\Column(length: 255)]
-    #[Groups(['question:read', 'question:write', 'quiz:read', 'quiz:write'])]
+    #[Groups(['question:read', 'question:write', 'quiz:read', 'quiz:write', 'questionAttempt:read', 'quizAttempt:read'])]
     private ?string $content = null;
 
     #[ORM\ManyToOne(inversedBy: 'questions')]

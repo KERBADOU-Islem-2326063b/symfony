@@ -5,3 +5,7 @@ api_platform:
         stateless: true
         cache_headers:
             vary: ['Content-Type', 'Authorization', 'Origin']
+    # L'application est petite, on peut désactiver le eager loading globalement
+    # pour éviter l'erreur "max_joins" sur les ressources très reliées (Quiz, QuizAttempt...).
+    eager_loading:
+        enabled: false

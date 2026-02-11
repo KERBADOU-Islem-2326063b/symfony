@@ -57,6 +57,7 @@ class QuizAttempt
      * @var Collection<int, QuestionAttempt>
      */
     #[ORM\OneToMany(targetEntity: QuestionAttempt::class, mappedBy: 'quizAttempt')]
+    #[Groups(['quizAttempt:read'])]
     private Collection $questionAttempts;
 
     public function __construct()

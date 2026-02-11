@@ -11,13 +11,19 @@ function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError("");
     const res = await login(email, password);
 
     if (res.success) {
-        loginSuccess();
-        navigate("/");
+      loginSuccess(res.user, res.roles, res.id);
+      navigate("/");
+    } else {
+      if (res.status === 401) {
+        setError("Identifiants invalides");
+      } else {
+        setError(res.message || "Erreur lors de la connexion");
+      }
     }
-
   };
 
   return (

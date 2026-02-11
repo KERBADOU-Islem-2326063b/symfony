@@ -8,27 +8,35 @@ function Register() {
 
   const [form, setForm] = useState({
     email: "",
-    password: "",
-    role: "",
-    terms: false
+    plainPassword: "",
+    role: ""
   });
   const [error, setError] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    if (!form.role) {
+      setError("Veuillez sélectionner un rôle.");
+      return;
+    }
+
     if (!form.terms) {
       setError("Veuillez accepter les conditions pour continuer.");
       return;
     }
 
-    const res = await register(form);
+    const res = await register({
+      email: form.email,
+      plainPassword: form.plainPassword,
+      roles: [form.role]
+    });
 
     if (res.success) {
-      loginSuccess();
+      loginSuccess(res.user, res.roles || (res.user && res.user.roles), res.id);
       navigate("/");
     } else {
-      setError(res.message);
+      setError(res.message || "Erreur lors de l'inscription");
     }
   };
 
@@ -42,7 +50,9 @@ function Register() {
         <form onSubmit={handleSubmit}>
           <input
             className="form-control mb-3"
+            type="email"
             placeholder="Email"
+            value={form.email}
             onChange={e => setForm({ ...form, email: e.target.value })}
             required
           />
@@ -51,7 +61,8 @@ function Register() {
             className="form-control mb-3"
             type="password"
             placeholder="Mot de passe"
-            onChange={e => setForm({ ...form, password: e.target.value })}
+            value={form.plainPassword}
+            onChange={e => setForm({ ...form, plainPassword: e.target.value })}
             required
           />
 
@@ -61,7 +72,7 @@ function Register() {
                 type="radio"
                 name="role"
                 className="form-check-input"
-                onChange={() => setForm({ ...form, role: "student" })}
+                onChange={() => setForm({ ...form, role: "ROLE_STUDENT" })}
                 required
               />
               <label className="form-check-label">Élève</label>
@@ -72,7 +83,7 @@ function Register() {
                 type="radio"
                 name="role"
                 className="form-check-input"
-                onChange={() => setForm({ ...form, role: "teacher" })}
+                onChange={() => setForm({ ...form, role: "ROLE_TEACHER" })}
               />
               <label className="form-check-label">Professeur</label>
             </div>
