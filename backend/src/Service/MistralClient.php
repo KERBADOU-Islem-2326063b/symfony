@@ -8,13 +8,63 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 class MistralClient
 {
     private const API_URL = 'https://api.mistral.ai/v1/chat/completions';
+    private const TRANSCRIPTION_API_URL = 'https://api.mistral.ai/v1/audio/transcriptions';
     private const DEFAULT_MODEL = 'mistral-small-latest';
+    private const TRANSCRIPTION_MODEL = 'voxtral-mini-latest';
 
     public function __construct(
         private readonly HttpClientInterface $httpClient,
         #[Autowire(env: 'MISTRAL_API_KEY')]
         private readonly string $apiKey,
     ) {
+    }
+
+    /**
+     * Transcrit un fichier audio/vidéo en texte.
+     * 
+     * @param string $audioFilePath Chemin absolu vers le fichier audio/vidéo
+     * @return string Le texte transcrit
+     * @throws \RuntimeException si la transcription échoue
+     */
+    public function transcribeAudio(string $audioFilePath): string
+    {
+        if (!file_exists($audioFilePath)) {
+            throw new \RuntimeException(sprintf('Fichier audio introuvable : %s', $audioFilePath));
+        }
+
+        // Lire le fichier audio
+        $audioContent = file_get_contents($audioFilePath);
+        if ($audioContent === false) {
+            throw new \RuntimeException(sprintf('Impossible de lire le fichier audio : %s', $audioFilePath));
+        }
+
+        try {
+            // L'API Mistral nécessite multipart/form-data avec le fichier directement
+            $response = $this->httpClient->request('POST', self::TRANSCRIPTION_API_URL, [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $this->apiKey,
+                ],
+                'body' => [
+                    'file' => fopen($audioFilePath, 'r'),
+                    'model' => self::TRANSCRIPTION_MODEL,
+                    'response_format' => 'text',
+                ],
+            ]);
+
+            $transcription = $response->getContent();
+            
+            if (empty(trim($transcription))) {
+                throw new \RuntimeException('La transcription est vide');
+            }
+
+            return trim($transcription);
+        } catch (\Throwable $e) {
+            throw new \RuntimeException(
+                sprintf('Erreur lors de la transcription audio : %s', $e->getMessage()),
+                0,
+                $e
+            );
+        }
     }
 
     /**

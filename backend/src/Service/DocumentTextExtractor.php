@@ -8,10 +8,15 @@ use PhpOffice\PhpWord\IOFactory;
 use Smalot\PdfParser\Parser as PdfParser;
 
 /**
- * Extraction de texte depuis un document (PDF, DOCX, TXT).
+ * Extraction de texte depuis un document (PDF, DOCX, TXT) ou transcription audio/vidéo (MP4).
  */
 class DocumentTextExtractor
 {
+    public function __construct(
+        private readonly ?MistralClient $mistralClient = null,
+    ) {
+    }
+    
     /**
      * @throws \RuntimeException si le fichier est introuvable ou non supporté.
      */
@@ -27,6 +32,7 @@ class DocumentTextExtractor
             'txt'  => $this->extractFromTxt($absolutePath),
             'pdf'  => $this->extractFromPdf($absolutePath),
             'docx' => $this->extractFromDocx($absolutePath),
+            'mp4'  => $this->extractFromVideo($absolutePath),
             default => throw new \RuntimeException(sprintf('Extension de document non supportée : %s', $extension)),
         };
     }
@@ -82,8 +88,24 @@ class DocumentTextExtractor
             return implode('', $parts);
         }
 
-        // Pour les autres types d’éléments, on peut étendre plus tard si besoin.
+        // Pour les autres types d'éléments, on peut étendre plus tard si besoin.
         return '';
     }
-}
 
+    /**
+     * Extrait le texte d'une vidéo en la transcrivant avec Mistral AI.
+     * 
+     * @throws \RuntimeException si MistralClient n'est pas disponible ou si la transcription échoue
+     */
+    private function extractFromVideo(string $path): string
+    {
+        if (!$this->mistralClient) {
+            throw new \RuntimeException(
+                'La transcription vidéo nécessite MistralClient. ' .
+                'Assurez-vous que le service est correctement configuré.'
+            );
+        }
+
+        return $this->mistralClient->transcribeAudio($path);
+    }
+}
