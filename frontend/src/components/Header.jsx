@@ -1,8 +1,7 @@
-import { useNavigate } from "react-router-dom";
 import { logout, getUser, getRoles } from "../services/auth.state";
+import { API_URL } from "../services/auth.service";
 
 function Header() {
-  const navigate = useNavigate();
   const user = getUser();
 
   // On s'assure de ne JAMAIS rendre un objet React.
@@ -19,9 +18,26 @@ function Header() {
     .map(r => r === "ROLE_TEACHER" ? "Professeur" : r === "ROLE_STUDENT" ? "Élève" : r)
     .join(", ");
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      // Appeler le backend pour déconnecter la session côté serveur
+      const baseUrl = API_URL.replace('/api', '');
+      await fetch(`${baseUrl}/logout`, {
+        method: "POST",
+        credentials: 'include',
+      }).catch(() => {
+        // Ignorer les erreurs de déconnexion côté serveur
+      });
+    } catch (e) {
+      // Ignorer les erreurs
+    }
+    
+    // Nettoyer le localStorage
     logout();
-    navigate("/login");
+    
+    // Forcer un rechargement complet de la page pour éviter les conflits de navigation
+    // Cela nettoie tout l'état React et évite les boucles de redirection
+    window.location.href = "/login";
   };
 
   return (
