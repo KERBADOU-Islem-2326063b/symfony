@@ -9,3 +9,8 @@
 
 controllers:
     resource: routing.controllers
+
+course_download:
+    path: /courses/{filename}
+    controller: App\Controller\CourseDownloadController::__invoke
+    methods: GET
