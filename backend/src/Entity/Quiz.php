@@ -39,7 +39,10 @@ class Quiz
      * @var Collection<int, Question>
      */
     #[ORM\OneToMany(targetEntity: Question::class, mappedBy: 'quiz')]
+<<<<<<< HEAD
     #[Groups(['quiz:read'])]
+=======
+>>>>>>> main
     private Collection $questions;
 
     #[ORM\Column(length: 255)]
