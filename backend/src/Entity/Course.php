@@ -24,6 +24,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
             inputFormats: ['multipart' => ['multipart/form-data']],
             controller: CourseUploadController::class,
             deserialize: false,
+            stateless: false,
         ),
         new Post(),
         new GetCollection(),
@@ -47,12 +48,19 @@ class Course
     private ?string $name = null;
 
     #[ORM\Column(length: 255)]
+    #[Groups(['course:read'])]
     private ?string $fileName = null;
+
+    #[ORM\ManyToOne(inversedBy: 'courses')]
+    #[ORM\JoinColumn(nullable: false)]
+    #[Groups(['course:read', 'course:write'])]
+    private ?User $teacher = null;
 
     /**
      * @var Collection<int, Quiz>
      */
     #[ORM\OneToMany(targetEntity: Quiz::class, mappedBy: 'course')]
+    #[Groups(['course:read'])]
     private Collection $quiz;
 
     public function __construct()
@@ -85,6 +93,18 @@ class Course
     public function setFileName(string $fileName): static
     {
         $this->fileName = $fileName;
+
+        return $this;
+    }
+
+    public function getTeacher(): ?User
+    {
+        return $this->teacher;
+    }
+
+    public function setTeacher(?User $teacher): static
+    {
+        $this->teacher = $teacher;
 
         return $this;
     }

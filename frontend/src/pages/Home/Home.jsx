@@ -2,6 +2,19 @@ import Header from "../../components/Header";
 import { useState, useEffect } from "react";
 import { getRoles, getUser, getUserId } from "../../services/auth.state";
 import { API_URL } from "../../services/auth.service";
+import {
+  fetchCourses,
+  uploadCourse,
+  generateQuizForCourse,
+  loadFullQuiz,
+  submitQuizAnswers,
+  loadQuizAttempts,
+  computeScoreFromQuestionAttempts,
+  formatDate,
+  getCourseViewUrl,
+  extractIdFromResource,
+  normalizeApiCollection,
+} from "../../services/course.service";
 import { FaChevronLeft, FaChevronRight, FaFileAlt } from "react-icons/fa";
 
 function Carousel({ items, renderItem, icon }) {
@@ -71,6 +84,17 @@ function Home() {
   const [submitError, setSubmitError] = useState("");
   const [submitSuccess, setSubmitSuccess] = useState("");
 
+  const [courses, setCourses] = useState([]);
+  const [loadingCourses, setLoadingCourses] = useState(false);
+  const [coursesError, setCoursesError] = useState("");
+  const [uploadingCourse, setUploadingCourse] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const [uploadSuccess, setUploadSuccess] = useState("");
+  const [viewingCourse, setViewingCourse] = useState(null);
+  const [generatingQuizForCourse, setGeneratingQuizForCourse] = useState(null);
+  const [numberOfQuestions, setNumberOfQuestions] = useState(10);
+  const [showQuizModal, setShowQuizModal] = useState(false);
+
   const currentUser = getUser();
   const currentUserId = getUserId();
   const BASE_URL = API_URL.replace(/\/api$/, "");
@@ -96,7 +120,6 @@ function Home() {
     const map = {};
     quizzes.forEach((quiz) => {
       if (!quiz || !quiz.title) return;
-      // On se base sur le format du titre dans UploadController
       const match = quiz.title.match(/QCM généré à partir de (.+)$/i);
       if (match && match[1]) {
         const filename = match[1].trim();
@@ -104,50 +127,6 @@ function Home() {
       }
     });
     return map;
-  };
-
-  const computeScoreFromQuestionAttempts = (questionAttempts) => {
-    if (!questionAttempts || questionAttempts.length === 0) return null;
-    const total = questionAttempts.length;
-    const correct = questionAttempts.filter((qa) => qa.answeredCorrectly).length;
-    const noteSur20 = (correct / total) * 20;
-    return `${noteSur20.toFixed(1)}/20`;
-  };
-
-  const formatDate = (value) => {
-    if (!value) return "";
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return String(value);
-    return d.toLocaleDateString();
-  };  
-
-  const extractIdFromResource = (resource) => {
-    if (!resource) return null;
-
-    // Cas 1: valeur scalaire directe (number ou string représentant un id ou une IRI)
-    if (typeof resource === "number") {
-      return String(resource);
-    }
-    if (typeof resource === "string") {
-      // "5" -> "5"
-      if (/^\d+$/.test(resource)) {
-        return resource;
-      }
-      // "/api/users/5" -> "5"
-      const parts = resource.split("/");
-      const last = parts[parts.length - 1];
-      return last && /^\d+$/.test(last) ? last : null;
-    }
-
-    // Cas 2: objet JSON
-    if (typeof resource.id !== "undefined" && resource.id !== null) {
-      return String(resource.id);
-    }
-    if (typeof resource["@id"] === "string") {
-      const parts = resource["@id"].split("/");
-      return parts[parts.length - 1] || null;
-    }
-    return null;
   };
 
   const loadHomeData = async () => {
@@ -158,9 +137,9 @@ function Home() {
 
     try {
       const [docsRes, quizzesRes, attemptsRes] = await Promise.all([
-        fetch(`${BASE_URL}/uploads/documents`),
-        fetch(`${API_URL}/quizzes`),
-        fetch(`${API_URL}/quiz_attempts`),
+        fetch(`${BASE_URL}/uploads/documents`, { credentials: 'include' }),
+        fetch(`${API_URL}/quizzes`, { credentials: 'include' }),
+        fetch(`${API_URL}/quiz_attempts`, { credentials: 'include' }),
       ]);
 
       // Documents
@@ -195,42 +174,12 @@ function Home() {
       setLoadingDocuments(false);
 
       // Quiz attempts
-      if (attemptsRes.ok) {
-        let attemptsJson = {};
-        try {
-          attemptsJson = await attemptsRes.json();
-        } catch (e) {
-          attemptsJson = {};
-        }
-        const allAttempts = Array.isArray(attemptsJson["hydra:member"])
-          ? attemptsJson["hydra:member"]
-          : Array.isArray(attemptsJson.member)
-          ? attemptsJson.member
-          : Array.isArray(attemptsJson)
-          ? attemptsJson
-          : [];
-
-        let filtered = allAttempts;
-        if (currentUserId) {
-          filtered = allAttempts.filter((attempt) => {
-            const studentId = extractIdFromResource(attempt.student);
-            return studentId === currentUserId;
-          });
-        }
-
-        const attemptsWithScore = filtered.map((attempt) => ({
-          ...attempt,
-          _computedScore: computeScoreFromQuestionAttempts(
-            attempt.questionAttempts || []
-          ),
-        }));
-
-        setQuizAttempts(attemptsWithScore);
+      const attemptsResult = await loadQuizAttempts(currentUserId);
+      if (attemptsResult.success) {
+        setQuizAttempts(attemptsResult.attempts);
         setLoadingAttempts(false);
       } else {
-        setAttemptsError(
-          "Impossible de charger les tentatives de QCM pour le moment."
-        );
+        setAttemptsError(attemptsResult.error || "Impossible de charger les tentatives de QCM pour le moment.");
         setLoadingAttempts(false);
       }
     } catch (e) {
@@ -251,6 +200,7 @@ function Home() {
         )}`,
         {
           method: "POST",
+          credentials: 'include',
           headers: {
             "Content-Type": "application/json",
             Accept: "application/ld+json",
@@ -314,9 +264,6 @@ function Home() {
   };
 
   const handleSubmitQuiz = async () => {
-    console.log("[Home] handleSubmitQuiz activeQuiz:", activeQuiz);
-    console.log("[Home] handleSubmitQuiz currentUserId:", currentUserId);
-
     if (!activeQuiz || !currentUserId) {
       setSubmitError(
         "Impossible d'envoyer le QCM : utilisateur non identifié ou QCM introuvable."
@@ -324,182 +271,410 @@ function Home() {
       return;
     }
 
-    const questions = activeQuiz.questions || [];
-    if (questions.length === 0) {
-      setSubmitError("Ce QCM ne contient aucune question.");
-      return;
-    }
-
-    const beginDate = quizStart || new Date();
-    const endDate = new Date();
-
-    // Calcul du score côté frontend à partir des réponses choisies
-    let correctCount = 0;
-    const questionPayloads = [];
-
-    questions.forEach((q) => {
-      const qId = q.id || extractIdFromResource(q);
-      const selectedResponseId = answers[qId];
-      const responses = q.possible_responses || q.possibleResponses || [];
-
-      const selectedResponse = responses.find((r) => {
-        const rId = r.id || extractIdFromResource(r);
-        return String(rId) === String(selectedResponseId);
-      });
-
-      // On tolère les deux formats de propriété: is_correct (backend) ou isCorrect (au cas où)
-      const isCorrectFlag =
-        selectedResponse &&
-        (selectedResponse.is_correct === true ||
-          selectedResponse.isCorrect === true);
-
-      const isCorrect = !!isCorrectFlag;
-
-      // Logs de debug pour une question
-      console.log("[Quiz] question", qId, {
-        selectedResponseId,
-        responses,
-        selectedResponse,
-        isCorrect,
-      });
-      if (isCorrect) correctCount += 1;
-
-      questionPayloads.push({
-        question: q,
-        answeredCorrectly: isCorrect,
-      });
-    });
-
-    const total = questions.length;
-    const noteSur20 = total > 0 ? ((correctCount / total) * 20).toFixed(1) : "0.0";
-
     setSubmitLoading(true);
     setSubmitError("");
     setSubmitSuccess("");
 
-    try {
-      // Création du QuizAttempt
-      const quizIri =
-        activeQuiz["@id"] || `/api/quizzes/${activeQuiz.id}`;
+    const result = await submitQuizAnswers(activeQuiz, answers, quizStart, currentUserId);
 
-      const quizAttemptRes = await fetch(`${API_URL}/quiz_attempts`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/ld+json",
-          Accept: "application/ld+json",
-        },
-        body: JSON.stringify({
-          student: `/api/users/${currentUserId}`,
-          quiz: quizIri,
-          beginTimestamp: beginDate.toISOString(),
-          endTimestamp: endDate.toISOString(),
-        }),
-      });
-
-      if (!quizAttemptRes.ok) {
-        throw new Error(
-          "Erreur lors de la création de la tentative de QCM."
-        );
-      }
-
-      const quizAttemptJson = await quizAttemptRes.json();
-      const quizAttemptIri =
-        quizAttemptJson["@id"] ||
-        `/api/quiz_attempts/${quizAttemptJson.id}`;
-
-      // Création des QuestionAttempt pour chaque question
-      await Promise.all(
-        questionPayloads.map((qp) => {
-          const questionIri =
-            qp.question["@id"] || `/api/questions/${qp.question.id}`;
-          return fetch(`${API_URL}/question_attempts`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/ld+json",
-              Accept: "application/ld+json",
-            },
-            body: JSON.stringify({
-              answeredCorrectly: qp.answeredCorrectly,
-              question: questionIri,
-              quizAttempt: quizAttemptIri,
-            }),
-          });
-        })
-      );
-
+    if (result.success) {
       setSubmitSuccess(
-        `Vos réponses ont été enregistrées. Résultat : ${noteSur20}/20.`
+        `Vos réponses ont été enregistrées. Résultat : ${result.score}/20.`
       );
-      setSubmitLoading(false);
-
-      // On remonte vers le haut pour voir le message et la note
       window.scrollTo({ top: 0, behavior: "smooth" });
-
-      // On recharge la liste des tentatives pour mettre à jour le tableau
       loadHomeData();
-    } catch (e) {
-      setSubmitError(
-        e.message ||
-          "Erreur lors de l'envoi de vos réponses. Veuillez réessayer."
-      );
-      setSubmitLoading(false);
+    } else {
+      setSubmitError(result.error || "Erreur lors de l'envoi de vos réponses. Veuillez réessayer.");
     }
+
+    setSubmitLoading(false);
+  };
+
+  const handleLoadCourses = async () => {
+    if (!role) return;
+    
+    setLoadingCourses(true);
+    setCoursesError("");
+
+    const result = await fetchCourses();
+    
+    if (result.success) {
+      setCourses(result.courses);
+    } else {
+      setCoursesError(result.error || "Erreur lors du chargement des cours");
+    }
+    
+    setLoadingCourses(false);
+  };
+
+  useEffect(() => {
+    if (role) {
+      handleLoadCourses();
+    }
+  }, [role]);
+
+  const handleOpenQuizModal = (course) => {
+    const courseId = course.id || course["@id"]?.split("/").pop();
+    setGeneratingQuizForCourse(courseId);
+    setNumberOfQuestions(10);
+    setShowQuizModal(true);
+  };
+
+  const handleGenerateQuizForCourse = async () => {
+    if (!generatingQuizForCourse) return;
+    
+    setUploadError("");
+    setUploadSuccess("");
+
+    const result = await generateQuizForCourse(generatingQuizForCourse, numberOfQuestions);
+
+    if (result.success) {
+      setUploadSuccess(`QCM généré avec succès ! ${result.quiz.questions?.length || 0} questions créées.`);
+      setShowQuizModal(false);
+      setGeneratingQuizForCourse(null);
+      await handleLoadCourses();
+    } else {
+      setUploadError(result.error || "Erreur lors de la génération du QCM");
+    }
+  };
+
+  const handleUploadCourse = async (event) => {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const file = formData.get("file");
+    const name = formData.get("name");
+
+    setUploadingCourse(true);
+    setUploadError("");
+    setUploadSuccess("");
+
+    const result = await uploadCourse(name, file);
+
+    if (result.success) {
+      setUploadSuccess("Cours créé avec succès !");
+      event.target.reset();
+      await handleLoadCourses();
+    } else {
+      setUploadError(result.error || "Erreur lors de l'upload");
+    }
+
+    setUploadingCourse(false);
+  };
+
+  const handleViewCourse = (course) => {
+    if (!course || !course.id) return;
+    const viewUrl = getCourseViewUrl(course.id);
+    setViewingCourse({ ...course, viewUrl });
+  };
+
+  const handleCloseViewer = () => {
+    setViewingCourse(null);
   };
 
   return (
     <div className="bg-light min-vh-100">
       <Header />
       <div className="container my-5">
-        <h4 className="mb-3">📄 Documents de cours</h4>
-        {documentsError && (
-          <div className="alert alert-danger">{documentsError}</div>
-        )}
-        {loadingDocuments ? (
-          <div>Chargement des documents...</div>
-        ) : (
-          <Carousel
-            items={documents}
-            icon={<FaFileAlt size={48} className="text-secondary mb-2" />}
-            renderItem={(d, icon) => (
-              <div className="card shadow-sm text-center">
-                <div className="card-body">
-                  <h6>{d.name}</h6>
-                  {icon}
-                  <small>{(d.size / 1024).toFixed(1)} Ko</small>
-                  <div className="mt-3 d-flex gap-2 justify-content-center">
-                    {role === "ROLE_TEACHER" && (
-                      <button
-                        className="btn btn-success btn-sm"
-                        onClick={() => handleGenerateQuiz(d)}
-                        disabled={!!d.quiz || generatingFor === d.name}
-                      >
-                        {d.quiz
-                          ? "QCM généré"
-                          : generatingFor === d.name
-                          ? "Génération en cours..."
-                          : "Générer le QCM"}
-                      </button>
-                    )}
-                    {role === "ROLE_STUDENT" && d.quiz && (
-                      <button
-                        className="btn btn-primary btn-sm"
-                        onClick={() => handleStartQuiz(d)}
-                      >
-                        Passer le QCM
-                      </button>
-                    )}
+        {role === "ROLE_TEACHER" && (
+          <>
+            <h4 className="mb-3">📚 Mes cours</h4>
+            {uploadError && (
+              <div className="alert alert-danger">{uploadError}</div>
+            )}
+            {uploadSuccess && (
+              <div className="alert alert-success">{uploadSuccess}</div>
+            )}
+            <div className="card shadow-sm mb-4">
+              <div className="card-body">
+                <h5 className="card-title">Ajouter un nouveau cours</h5>
+                <form onSubmit={handleUploadCourse}>
+                  <div className="mb-3">
+                    <label htmlFor="courseName" className="form-label">
+                      Nom du cours
+                    </label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      id="courseName"
+                      name="name"
+                      required
+                      placeholder="Ex: Introduction à la programmation"
+                    />
                   </div>
-                  {role === "ROLE_STUDENT" && !d.quiz && (
-                    <div className="mt-2">
-                      <small className="text-muted">
-                        QCM non disponible pour ce document.
-                      </small>
+                  <div className="mb-3">
+                    <label htmlFor="courseFile" className="form-label">
+                      Fichier (PDF ou MP4)
+                    </label>
+                    <input
+                      type="file"
+                      className="form-control"
+                      id="courseFile"
+                      name="file"
+                      accept=".pdf,.mp4"
+                      required
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={uploadingCourse}
+                  >
+                    {uploadingCourse ? "Upload en cours..." : "Créer le cours"}
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            {loadingCourses ? (
+              <div className="mb-4">Chargement de vos cours...</div>
+            ) : coursesError ? (
+              <div className="alert alert-warning mb-4">{coursesError}</div>
+            ) : courses.length === 0 ? (
+              <div className="alert alert-info mb-4">
+                Vous n'avez pas encore de cours. Créez-en un ci-dessus.
+              </div>
+            ) : (
+              <div className="card shadow-sm mb-5">
+                <div className="card-body">
+                  <h5 className="card-title">Liste de vos cours</h5>
+                  <div className="table-responsive">
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th>Nom</th>
+                          <th>Fichier</th>
+                          <th>QCM</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {courses.map((course) => (
+                          <tr key={course.id || course["@id"]}>
+                            <td>{course.name}</td>
+                            <td>
+                              <small className="text-muted">
+                                {course.fileName || "N/A"}
+                              </small>
+                            </td>
+                            <td>
+                              {course.quiz ? (
+                                <span className="badge bg-success">QCM généré</span>
+                              ) : (
+                                <span className="badge bg-secondary">Aucun QCM</span>
+                              )}
+                            </td>
+                            <td>
+                              <div className="btn-group" role="group">
+                                <button
+                                  className="btn btn-sm btn-primary"
+                                  onClick={() => handleViewCourse(course)}
+                                >
+                                  Visualiser
+                                </button>
+                                <button
+                                  className="btn btn-sm btn-success"
+                                  onClick={() => handleOpenQuizModal(course)}
+                                  disabled={!!course.quiz}
+                                >
+                                  {course.quiz ? "QCM généré" : "Générer QCM"}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {viewingCourse && (
+          <div
+            className="modal show d-block"
+            style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+            onClick={handleCloseViewer}
+          >
+            <div
+              className="modal-dialog modal-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">{viewingCourse.name}</h5>
+                  <button
+                    type="button"
+                    className="btn-close"
+                    onClick={handleCloseViewer}
+                  ></button>
+                </div>
+                <div className="modal-body" style={{ minHeight: "70vh" }}>
+                  {viewingCourse.fileName?.endsWith(".pdf") ? (
+                    <iframe
+                      src={viewingCourse.viewUrl}
+                      style={{ width: "100%", height: "70vh", border: "none" }}
+                      title={viewingCourse.name}
+                    />
+                  ) : viewingCourse.fileName?.endsWith(".mp4") ? (
+                    <video
+                      src={viewingCourse.viewUrl}
+                      controls
+                      style={{ width: "100%", maxHeight: "70vh" }}
+                    >
+                      Votre navigateur ne supporte pas la lecture vidéo.
+                    </video>
+                  ) : (
+                    <div className="alert alert-warning">
+                      Type de fichier non supporté pour la visualisation
                     </div>
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {showQuizModal && (
+          <div
+            className="modal show d-block"
+            style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+            onClick={() => {
+              setShowQuizModal(false);
+              setGeneratingQuizForCourse(null);
+            }}
+          >
+            <div
+              className="modal-dialog"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">Générer un QCM</h5>
+                  <button
+                    type="button"
+                    className="btn-close"
+                    onClick={() => {
+                      setShowQuizModal(false);
+                      setGeneratingQuizForCourse(null);
+                    }}
+                  ></button>
+                </div>
+                <div className="modal-body">
+                  <div className="mb-3">
+                    <label htmlFor="numberOfQuestions" className="form-label">
+                      Nombre de questions (entre 1 et 50)
+                    </label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      id="numberOfQuestions"
+                      min="1"
+                      max="50"
+                      value={numberOfQuestions}
+                      onChange={(e) => setNumberOfQuestions(parseInt(e.target.value) || 10)}
+                    />
+                    <small className="form-text text-muted">
+                      Le QCM sera généré avec {numberOfQuestions} question{numberOfQuestions > 1 ? 's' : ''}.
+                    </small>
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      setShowQuizModal(false);
+                      setGeneratingQuizForCourse(null);
+                    }}
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={handleGenerateQuizForCourse}
+                    disabled={!numberOfQuestions || numberOfQuestions < 1 || numberOfQuestions > 50}
+                  >
+                    Générer le QCM
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {role === "ROLE_STUDENT" && (
+          <>
+            <h4 className="mb-3">📚 Cours disponibles</h4>
+            {loadingCourses ? (
+              <div>Chargement des cours...</div>
+            ) : coursesError ? (
+              <div className="alert alert-warning">{coursesError}</div>
+            ) : courses.length === 0 ? (
+              <div className="alert alert-info">
+                Aucun cours disponible pour le moment.
+              </div>
+            ) : (
+              <div className="row">
+                {courses.map((course) => (
+                  <div key={course.id || course["@id"]} className="col-md-4 mb-3">
+                    <div className="card shadow-sm">
+                      <div className="card-body">
+                        <h5 className="card-title">{course.name}</h5>
+                        <p className="card-text">
+                          <small className="text-muted">
+                            {course.fileName || "N/A"}
+                          </small>
+                        </p>
+                        <div className="d-flex gap-2">
+                          <button
+                            className="btn btn-sm btn-primary"
+                            onClick={() => handleViewCourse(course)}
+                          >
+                            Visualiser
+                          </button>
+                          {course.quiz && (
+                            <button
+                              className="btn btn-sm btn-success"
+                              onClick={async () => {
+                                const quizId = course.quiz.id || extractIdFromResource(course.quiz);
+                                const result = await loadFullQuiz(quizId);
+                                
+                                if (result.success) {
+                                  setActiveDocument(course);
+                                  setActiveQuiz(result.quiz);
+                                  setAnswers({});
+                                  setSubmitError("");
+                                  setSubmitSuccess("");
+                                  setQuizStart(new Date());
+                                  setTimeout(() => {
+                                    window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+                                  }, 100);
+                                } else {
+                                  alert("Erreur lors du chargement du QCM: " + (result.error || "Erreur inconnue"));
+                                }
+                              }}
+                            >
+                              Passer le QCM
+                            </button>
+                          )}
+                        </div>
+                        {!course.quiz && (
+                          <div className="mt-2">
+                            <small className="text-muted">
+                              QCM non disponible pour ce cours.
+                            </small>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
-          />
+          </>
         )}
 
         {activeQuiz && (
@@ -508,6 +683,16 @@ function Home() {
               QCM : {activeQuiz.title}{" "}
               {activeDocument ? `(${activeDocument.name})` : ""}
             </h4>
+            {activeDocument && (
+              <div className="mb-3">
+                <button
+                  className="btn btn-sm btn-secondary"
+                  onClick={() => handleViewCourse(activeDocument)}
+                >
+                  Voir le cours
+                </button>
+              </div>
+            )}
             {submitError && (
               <div className="alert alert-danger">{submitError}</div>
             )}
@@ -516,10 +701,31 @@ function Home() {
             )}
             <div className="card shadow-sm mb-3">
               <div className="card-body">
+                {(!activeQuiz.questions || activeQuiz.questions.length === 0) && (
+                  <div className="alert alert-warning">
+                    Aucune question disponible dans ce QCM.
+                  </div>
+                )}
+                {console.log("[Quiz Debug] activeQuiz:", activeQuiz)}
+                {console.log("[Quiz Debug] questions:", activeQuiz.questions)}
                 {(activeQuiz.questions || []).map((q, index) => {
                   const qId = q.id || extractIdFromResource(q);
+                  // Symfony sérialise getPossibleResponses() comme "possibleResponses" (camelCase)
                   const responses =
-                    q.possible_responses || q.possibleResponses || [];
+                    q.possibleResponses || q.possible_responses || [];
+                  
+                  // Debug pour la première question
+                  if (index === 0) {
+                    console.log("[Quiz] Question:", q);
+                    console.log("[Quiz] Responses (possibleResponses):", q.possibleResponses);
+                    console.log("[Quiz] Responses (possible_responses):", q.possible_responses);
+                    console.log("[Quiz] All question keys:", Object.keys(q));
+                  }
+                  
+                  if (!responses || responses.length === 0) {
+                    console.warn(`[Quiz] Question ${index + 1} n'a pas de réponses disponibles`);
+                  }
+                  
                   return (
                     <div key={qId || index} className="mb-4 text-start">
                       <p className="fw-bold">

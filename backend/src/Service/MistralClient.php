@@ -20,11 +20,12 @@ class MistralClient
     /**
      * Génère un QCM à partir d'un texte (transcription vidéo ou texte de document).
      *
+     * @param int $numberOfQuestions Nombre de questions à générer (par défaut: entre 5 et 10)
      * @return array<mixed>
      */
-    public function generateQuizFromContent(string $content, string $sourceName, string $sourceType): array
+    public function generateQuizFromContent(string $content, string $sourceName, string $sourceType, ?int $numberOfQuestions = null): array
     {
-        $prompt = $this->buildPrompt($content, $sourceName, $sourceType);
+        $prompt = $this->buildPrompt($content, $sourceName, $sourceType, $numberOfQuestions);
 
         $response = $this->httpClient->request('POST', self::API_URL, [
             'headers' => [
@@ -81,8 +82,12 @@ class MistralClient
         ];
     }
 
-    private function buildPrompt(string $content, string $sourceName, string $sourceType): string
+    private function buildPrompt(string $content, string $sourceName, string $sourceType, ?int $numberOfQuestions = null): string
     {
+        $questionsInstruction = $numberOfQuestions 
+            ? sprintf('Produit exactement %d questions.', $numberOfQuestions)
+            : 'Produit entre 5 et 10 questions.';
+        
         return sprintf(
             <<<PROMPT
 Génère un QCM en français basé sur le contenu suivant, provenant d'un(e) %s nommé(e) "%s".
@@ -110,11 +115,14 @@ Je veux le résultat au format JSON STRICT, sans aucun texte avant ou après, av
   ]
 }
 
-Produit entre 5 et 10 questions.
+%s
+
+IMPORTANT : Chaque question doit avoir au moins 4 choix de réponse (A, B, C, D minimum).
 PROMPT,
             $sourceType,
             $sourceName,
-            $content
+            $content,
+            $questionsInstruction
         );
     }
 }
