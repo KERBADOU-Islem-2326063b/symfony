@@ -74,6 +74,8 @@ class CourseQuizController extends AbstractController
             );
         }
 
+        $allowMultipleChoices = isset($payload['allowMultipleChoices']) && $payload['allowMultipleChoices'] === true;
+
         $filePath = $this->kernel->getProjectDir() . '/var/uploads/' . $course->getFileName();
         if (!file_exists($filePath)) {
             return $this->json(
@@ -84,7 +86,7 @@ class CourseQuizController extends AbstractController
 
         try {
             $text = $this->documentTextExtractor->extractText($filePath);
-            $quizData = $this->mistralClient->generateQuizFromContent($text, $course->getName(), 'cours', $numberOfQuestions);
+            $quizData = $this->mistralClient->generateQuizFromContent($text, $course->getName(), 'cours', $numberOfQuestions, $allowMultipleChoices);
         } catch (\Throwable $e) {
             return $this->json(
                 ['error' => 'Erreur lors de la génération du QCM', 'details' => $e->getMessage()],
@@ -122,7 +124,15 @@ class CourseQuizController extends AbstractController
             $question->setQuiz($quiz);
             $quiz->addQuestion($question);
 
-            $answerIndex = isset($questionData['answer_index']) ? (int) $questionData['answer_index'] : -1;
+            // Gérer les réponses correctes : peut être un index unique ou un tableau d'index
+            $answerIndices = [];
+            if (isset($questionData['answer_indices']) && \is_array($questionData['answer_indices'])) {
+                // Format multichoix : tableau d'index
+                $answerIndices = array_map('intval', $questionData['answer_indices']);
+            } elseif (isset($questionData['answer_index'])) {
+                // Format classique : un seul index
+                $answerIndices = [(int) $questionData['answer_index']];
+            }
 
             foreach ($questionData['choices'] as $index => $choiceText) {
                 if (!\is_string($choiceText) || $choiceText === '') {
@@ -131,7 +141,7 @@ class CourseQuizController extends AbstractController
 
                 $response = new QuizResponse();
                 $response->setContent($choiceText);
-                $response->setIsCorrect($index === $answerIndex);
+                $response->setIsCorrect(\in_array($index, $answerIndices, true));
                 $response->setQuestion($question);
                 $question->addPossibleResponse($response);
 

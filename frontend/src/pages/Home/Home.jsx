@@ -93,6 +93,8 @@ function Home() {
   const [viewingCourse, setViewingCourse] = useState(null);
   const [generatingQuizForCourse, setGeneratingQuizForCourse] = useState(null);
   const [numberOfQuestions, setNumberOfQuestions] = useState(10);
+  const [allowMultipleChoices, setAllowMultipleChoices] = useState(false);
+  const [generatingQuiz, setGeneratingQuiz] = useState(false);
   const [showQuizModal, setShowQuizModal] = useState(false);
 
   const currentUser = getUser();
@@ -256,11 +258,34 @@ function Home() {
     window.scrollTo({ top: document.body?.scrollHeight || 0, behavior: "smooth" });
   };
 
-  const handleAnswerChange = (questionId, responseId) => {
-    setAnswers((prev) => ({
-      ...prev,
-      [questionId]: responseId,
-    }));
+  const handleAnswerChange = (questionId, responseId, isMultipleChoice) => {
+    setAnswers((prev) => {
+      if (isMultipleChoice) {
+        // Pour les questions multichoix, gérer un tableau de réponses
+        const currentAnswers = prev[questionId] || [];
+        const isSelected = Array.isArray(currentAnswers) && currentAnswers.includes(String(responseId));
+        
+        if (isSelected) {
+          // Désélectionner la réponse
+          return {
+            ...prev,
+            [questionId]: currentAnswers.filter(id => id !== String(responseId)),
+          };
+        } else {
+          // Sélectionner la réponse
+          return {
+            ...prev,
+            [questionId]: [...currentAnswers, String(responseId)],
+          };
+        }
+      } else {
+        // Pour les questions à choix unique, une seule réponse
+        return {
+          ...prev,
+          [questionId]: String(responseId),
+        };
+      }
+    });
   };
 
   const handleSubmitQuiz = async () => {
@@ -317,16 +342,20 @@ function Home() {
     const courseId = course.id || course["@id"]?.split("/").pop();
     setGeneratingQuizForCourse(courseId);
     setNumberOfQuestions(10);
+    setAllowMultipleChoices(false);
     setShowQuizModal(true);
   };
 
   const handleGenerateQuizForCourse = async () => {
     if (!generatingQuizForCourse) return;
     
+    setGeneratingQuiz(true);
     setUploadError("");
     setUploadSuccess("");
 
-    const result = await generateQuizForCourse(generatingQuizForCourse, numberOfQuestions);
+    const result = await generateQuizForCourse(generatingQuizForCourse, numberOfQuestions, allowMultipleChoices);
+
+    setGeneratingQuiz(false);
 
     if (result.success) {
       setUploadSuccess(`QCM généré avec succès ! ${result.quiz.questions?.length || 0} questions créées.`);
@@ -593,11 +622,38 @@ function Home() {
                       max="50"
                       value={numberOfQuestions}
                       onChange={(e) => setNumberOfQuestions(parseInt(e.target.value) || 10)}
+                      disabled={generatingQuiz}
                     />
                     <small className="form-text text-muted">
                       Le QCM sera généré avec {numberOfQuestions} question{numberOfQuestions > 1 ? 's' : ''}.
                     </small>
                   </div>
+                  <div className="mb-3">
+                    <div className="form-check">
+                      <input
+                        className="form-check-input"
+                        type="checkbox"
+                        id="allowMultipleChoices"
+                        checked={allowMultipleChoices}
+                        onChange={(e) => setAllowMultipleChoices(e.target.checked)}
+                        disabled={generatingQuiz}
+                      />
+                      <label className="form-check-label" htmlFor="allowMultipleChoices">
+                        Autoriser plusieurs réponses correctes par question (multichoix)
+                      </label>
+                    </div>
+                    <small className="form-text text-muted">
+                      Si activé, certaines questions pourront avoir plusieurs bonnes réponses.
+                    </small>
+                  </div>
+                  {generatingQuiz && (
+                    <div className="alert alert-info">
+                      <div className="spinner-border spinner-border-sm me-2" role="status">
+                        <span className="visually-hidden">Chargement...</span>
+                      </div>
+                      Génération du QCM en cours, veuillez patienter...
+                    </div>
+                  )}
                 </div>
                 <div className="modal-footer">
                   <button
@@ -614,9 +670,16 @@ function Home() {
                     type="button"
                     className="btn btn-primary"
                     onClick={handleGenerateQuizForCourse}
-                    disabled={!numberOfQuestions || numberOfQuestions < 1 || numberOfQuestions > 50}
+                    disabled={generatingQuiz || !numberOfQuestions || numberOfQuestions < 1 || numberOfQuestions > 50}
                   >
-                    Générer le QCM
+                    {generatingQuiz ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        Génération...
+                      </>
+                    ) : (
+                      "Générer le QCM"
+                    )}
                   </button>
                 </div>
               </div>
@@ -733,22 +796,40 @@ function Home() {
                   const responses =
                     q.possibleResponses || q.possible_responses || [];
                   
+                  // Déterminer si c'est une question multichoix (plusieurs réponses correctes)
+                  const correctResponses = responses.filter(r => 
+                    r.is_correct === true || r.isCorrect === true
+                  );
+                  const isMultipleChoice = correctResponses.length > 1;
+                  
                   // Debug pour la première question
                   if (index === 0) {
                     console.log("[Quiz] Question:", q);
-                    console.log("[Quiz] Responses (possibleResponses):", q.possibleResponses);
-                    console.log("[Quiz] Responses (possible_responses):", q.possible_responses);
-                    console.log("[Quiz] All question keys:", Object.keys(q));
+                    console.log("[Quiz] Is multiple choice:", isMultipleChoice);
+                    console.log("[Quiz] Correct responses count:", correctResponses.length);
                   }
                   
                   if (!responses || responses.length === 0) {
                     console.warn(`[Quiz] Question ${index + 1} n'a pas de réponses disponibles`);
                   }
                   
+                  // Récupérer les réponses sélectionnées pour cette question
+                  const selectedAnswers = answers[qId];
+                  const isSelected = (rId) => {
+                    if (isMultipleChoice) {
+                      return Array.isArray(selectedAnswers) && selectedAnswers.includes(String(rId));
+                    } else {
+                      return String(selectedAnswers) === String(rId);
+                    }
+                  };
+                  
                   return (
                     <div key={qId || index} className="mb-4 text-start">
                       <p className="fw-bold">
                         Question {index + 1}: {q.content}
+                        {isMultipleChoice && (
+                          <span className="badge bg-info ms-2">Plusieurs réponses possibles</span>
+                        )}
                       </p>
                       <div>
                         {responses.map((r) => {
@@ -757,14 +838,12 @@ function Home() {
                             <div className="form-check" key={rId}>
                               <input
                                 className="form-check-input"
-                                type="radio"
-                                name={`question-${qId}`}
+                                type={isMultipleChoice ? "checkbox" : "radio"}
+                                name={isMultipleChoice ? `question-${qId}-${rId}` : `question-${qId}`}
                                 id={`q${qId}-r${rId}`}
-                                checked={
-                                  String(answers[qId]) === String(rId)
-                                }
+                                checked={isSelected(rId)}
                                 onChange={() =>
-                                  handleAnswerChange(qId, rId)
+                                  handleAnswerChange(qId, rId, isMultipleChoice)
                                 }
                               />
                               <label

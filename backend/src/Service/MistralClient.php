@@ -21,11 +21,12 @@ class MistralClient
      * Génère un QCM à partir d'un texte (transcription vidéo ou texte de document).
      *
      * @param int $numberOfQuestions Nombre de questions à générer (par défaut: entre 5 et 10)
+     * @param bool $allowMultipleChoices Si true, certaines questions peuvent avoir plusieurs réponses correctes
      * @return array<mixed>
      */
-    public function generateQuizFromContent(string $content, string $sourceName, string $sourceType, ?int $numberOfQuestions = null): array
+    public function generateQuizFromContent(string $content, string $sourceName, string $sourceType, ?int $numberOfQuestions = null, bool $allowMultipleChoices = false): array
     {
-        $prompt = $this->buildPrompt($content, $sourceName, $sourceType, $numberOfQuestions);
+        $prompt = $this->buildPrompt($content, $sourceName, $sourceType, $numberOfQuestions, $allowMultipleChoices);
 
         $response = $this->httpClient->request('POST', self::API_URL, [
             'headers' => [
@@ -82,22 +83,37 @@ class MistralClient
         ];
     }
 
-    private function buildPrompt(string $content, string $sourceName, string $sourceType, ?int $numberOfQuestions = null): string
+    private function buildPrompt(string $content, string $sourceName, string $sourceType, ?int $numberOfQuestions = null, bool $allowMultipleChoices = false): string
     {
         $questionsInstruction = $numberOfQuestions 
             ? sprintf('Produit exactement %d questions.', $numberOfQuestions)
             : 'Produit entre 5 et 10 questions.';
         
-        return sprintf(
-            <<<PROMPT
-Génère un QCM en français basé sur le contenu suivant, provenant d'un(e) %s nommé(e) "%s".
-
-CONTENU :
----
-%s
----
-
-Je veux le résultat au format JSON STRICT, sans aucun texte avant ou après, avec la structure suivante :
+        $multipleChoicesInstruction = $allowMultipleChoices
+            ? "\nIMPORTANT : Certaines questions peuvent avoir PLUSIEURS réponses correctes. Dans ce cas, utilise 'answer_indices' (tableau) au lieu de 'answer_index' (nombre). Exemple : {\"answer_indices\": [0, 2]} signifie que les choix A et C sont corrects."
+            : "\nIMPORTANT : Chaque question a exactement UNE seule bonne réponse. Utilise 'answer_index' (un nombre) pour indiquer l'index de la bonne réponse.";
+        
+        $jsonStructure = $allowMultipleChoices
+            ? <<<JSON
+{
+  "title": "Titre du QCM",
+  "questions": [
+    {
+      "question": "Texte de la question",
+      "choices": [
+        "Choix A",
+        "Choix B",
+        "Choix C",
+        "Choix D"
+      ],
+      "answer_index": 0,
+      "answer_indices": [0],
+      "explanation": "Explication courte de la bonne réponse"
+    }
+  ]
+}
+JSON
+            : <<<JSON
 {
   "title": "Titre du QCM",
   "questions": [
@@ -114,6 +130,21 @@ Je veux le résultat au format JSON STRICT, sans aucun texte avant ou après, av
     }
   ]
 }
+JSON;
+        
+        return sprintf(
+            <<<PROMPT
+Génère un QCM en français basé sur le contenu suivant, provenant d'un(e) %s nommé(e) "%s".
+
+CONTENU :
+---
+%s
+---
+
+Je veux le résultat au format JSON STRICT, sans aucun texte avant ou après, avec la structure suivante :
+%s
+
+%s
 
 %s
 
@@ -122,7 +153,9 @@ PROMPT,
             $sourceType,
             $sourceName,
             $content,
-            $questionsInstruction
+            $jsonStructure,
+            $questionsInstruction,
+            $multipleChoicesInstruction
         );
     }
 }

@@ -133,7 +133,7 @@ export const uploadCourse = async (name, file) => {
 /**
  * Génère un QCM pour un cours
  */
-export const generateQuizForCourse = async (courseId, numberOfQuestions) => {
+export const generateQuizForCourse = async (courseId, numberOfQuestions, allowMultipleChoices = false) => {
   if (!courseId) {
     return { success: false, error: "ID du cours requis" };
   }
@@ -152,6 +152,7 @@ export const generateQuizForCourse = async (courseId, numberOfQuestions) => {
       },
       body: JSON.stringify({
         numberOfQuestions: numberOfQuestions,
+        allowMultipleChoices: allowMultipleChoices,
       }),
     });
 
@@ -279,20 +280,54 @@ export const submitQuizAnswers = async (quiz, answers, quizStart, currentUserId)
 
   questions.forEach((q) => {
     const qId = q.id || extractIdFromResource(q);
-    const selectedResponseId = answers[qId];
+    const selectedResponseIds = answers[qId];
     const responses = q.possible_responses || q.possibleResponses || [];
 
-    const selectedResponse = responses.find((r) => {
-      const rId = r.id || extractIdFromResource(r);
-      return String(rId) === String(selectedResponseId);
-    });
+    // Déterminer si c'est une question multichoix
+    const correctResponses = responses.filter(r => 
+      r.is_correct === true || r.isCorrect === true
+    );
+    const isMultipleChoice = correctResponses.length > 1;
 
-    const isCorrectFlag =
-      selectedResponse &&
-      (selectedResponse.is_correct === true ||
-        selectedResponse.isCorrect === true);
+    let isCorrect = false;
 
-    const isCorrect = !!isCorrectFlag;
+    if (isMultipleChoice) {
+      // Pour les questions multichoix : toutes les réponses correctes doivent être sélectionnées
+      // et seules les réponses correctes doivent être sélectionnées
+      const selectedIds = Array.isArray(selectedResponseIds) 
+        ? selectedResponseIds.map(id => String(id))
+        : [];
+      
+      const correctIds = correctResponses.map(r => {
+        const rId = r.id || extractIdFromResource(r);
+        return String(rId);
+      });
+
+      // Vérifier que les tableaux ont la même longueur et contiennent les mêmes éléments
+      if (selectedIds.length === correctIds.length) {
+        const allSelectedAreCorrect = selectedIds.every(id => correctIds.includes(id));
+        const allCorrectAreSelected = correctIds.every(id => selectedIds.includes(id));
+        isCorrect = allSelectedAreCorrect && allCorrectAreSelected;
+      }
+    } else {
+      // Pour les questions à choix unique : une seule réponse sélectionnée et elle doit être correcte
+      const selectedResponseId = Array.isArray(selectedResponseIds) 
+        ? selectedResponseIds[0] 
+        : selectedResponseIds;
+      
+      const selectedResponse = responses.find((r) => {
+        const rId = r.id || extractIdFromResource(r);
+        return String(rId) === String(selectedResponseId);
+      });
+
+      const isCorrectFlag =
+        selectedResponse &&
+        (selectedResponse.is_correct === true ||
+          selectedResponse.isCorrect === true);
+
+      isCorrect = !!isCorrectFlag;
+    }
+
     if (isCorrect) correctCount += 1;
 
     questionPayloads.push({
