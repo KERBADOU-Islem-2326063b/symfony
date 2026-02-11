@@ -24,10 +24,7 @@
         "symfony/flex": "^2",
         "symfony/framework-bundle": "8.0.*",
         "symfony/mime": "8.0.*",
-<<<<<<< HEAD
         "symfony/http-client": "8.0.*",
-=======
->>>>>>> main
         "symfony/property-access": "8.0.*",
         "symfony/property-info": "8.0.*",
         "symfony/runtime": "8.0.*",
