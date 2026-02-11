@@ -362,8 +362,14 @@ function Home() {
   };
 
   const handleViewCourse = (course) => {
-    if (!course || !course.id) return;
-    const viewUrl = getCourseViewUrl(course.id);
+    if (!course) return;
+    const courseId = course.id || extractIdFromResource(course);
+    if (!courseId) {
+      console.error("[handleViewCourse] Impossible d'extraire l'ID du cours:", course);
+      return;
+    }
+    const viewUrl = getCourseViewUrl(courseId);
+    console.log("[handleViewCourse] Opening viewer for course:", course.name, "URL:", viewUrl);
     setViewingCourse({ ...course, viewUrl });
   };
 
@@ -494,7 +500,7 @@ function Home() {
         {viewingCourse && (
           <div
             className="modal show d-block"
-            style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+            style={{ backgroundColor: "rgba(0,0,0,0.5)", zIndex: 1050, position: "fixed", top: 0, left: 0, right: 0, bottom: 0 }}
             onClick={handleCloseViewer}
           >
             <div
@@ -511,25 +517,38 @@ function Home() {
                   ></button>
                 </div>
                 <div className="modal-body" style={{ minHeight: "70vh" }}>
-                  {viewingCourse.fileName?.endsWith(".pdf") ? (
+                  {!viewingCourse.fileName ? (
+                    <div className="alert alert-warning">
+                      Aucun fichier associé à ce cours.
+                    </div>
+                  ) : viewingCourse.fileName.endsWith(".pdf") ? (
                     <iframe
                       src={viewingCourse.viewUrl}
                       style={{ width: "100%", height: "70vh", border: "none" }}
                       title={viewingCourse.name}
+                      onError={() => console.error("[Viewer] Erreur lors du chargement du PDF")}
                     />
-                  ) : viewingCourse.fileName?.endsWith(".mp4") ? (
+                  ) : viewingCourse.fileName.endsWith(".mp4") ? (
                     <video
                       src={viewingCourse.viewUrl}
                       controls
                       style={{ width: "100%", maxHeight: "70vh" }}
+                      onError={(e) => {
+                        console.error("[Viewer] Erreur lors du chargement de la vidéo:", e);
+                      }}
                     >
                       Votre navigateur ne supporte pas la lecture vidéo.
                     </video>
                   ) : (
                     <div className="alert alert-warning">
-                      Type de fichier non supporté pour la visualisation
+                      Type de fichier non supporté pour la visualisation: {viewingCourse.fileName}
                     </div>
                   )}
+                  <div className="mt-2">
+                    <small className="text-muted">
+                      URL: {viewingCourse.viewUrl}
+                    </small>
+                  </div>
                 </div>
               </div>
             </div>
