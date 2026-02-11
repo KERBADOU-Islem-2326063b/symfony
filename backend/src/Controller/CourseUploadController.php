@@ -41,10 +41,11 @@ final class CourseUploadController extends AbstractController
         }
 
         $extension = self::ALLOWED_MIME_TYPES[$mimeType];
-        $filename = uniqid('course_', true).'.'.$extension;
+        $uniqueId = bin2hex(random_bytes(8));
+        $filename = 'course_' .$uniqueId. '.'.$extension;
 
         $file->move(
-            self::PATH_TO_SAVE_FILES,
+            $this->getParameter('files_directory'),
             $filename
         );
 
