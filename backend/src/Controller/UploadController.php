@@ -125,7 +125,7 @@ class UploadController extends AbstractController
         if ($course === null) {
             $course = $this->entityManager
                 ->getRepository(Course::class)
-                ->findOneBy(['file_name' => $filename]);
+                ->findOneBy(['fileName' => $filename]);
         }
         if ($course instanceof Course) {
             $quiz->setCourse($course);
