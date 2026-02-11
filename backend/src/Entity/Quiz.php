@@ -43,7 +43,7 @@ class Quiz
     private Collection $questions;
 
     #[ORM\Column(length: 255)]
-    #[Groups(['quiz:read', 'quiz:write'])]
+    #[Groups(['quiz:read', 'quiz:write', 'quizAttempt:read'])]
     private ?string $title = null;
 
     #[ORM\ManyToOne(inversedBy: 'quizzes')]

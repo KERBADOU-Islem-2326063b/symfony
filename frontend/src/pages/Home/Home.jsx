@@ -1,5 +1,6 @@
 import Header from "../../components/Header";
 import { useState, useEffect } from "react";
+import React from "react";
 import { getRoles, getUser, getUserId } from "../../services/auth.state";
 import { API_URL } from "../../services/auth.service";
 import {
@@ -96,6 +97,7 @@ function Home() {
   const [allowMultipleChoices, setAllowMultipleChoices] = useState(false);
   const [generatingQuiz, setGeneratingQuiz] = useState(false);
   const [showQuizModal, setShowQuizModal] = useState(false);
+  const [expandedAttempts, setExpandedAttempts] = useState(new Set());
 
   const currentUser = getUser();
   const currentUserId = getUserId();
@@ -408,6 +410,11 @@ function Home() {
 
   return (
     <div className="bg-light min-vh-100">
+      <style>{`
+        .table-row-hover:hover {
+          background-color: #f8f9fa !important;
+        }
+      `}</style>
       <Header />
       <div className="container my-5">
         {role === "ROLE_TEACHER" && (
@@ -879,6 +886,7 @@ function Home() {
           <table className="table mb-0">
             <thead className="table-light">
               <tr>
+                <th style={{ width: '30px' }}></th>
                 <th>Étudiant</th>
                 <th>QCM</th>
                 <th>Date</th>
@@ -888,18 +896,33 @@ function Home() {
             <tbody>
               {loadingAttempts ? (
                 <tr>
-                  <td colSpan="4">Chargement des résultats...</td>
+                  <td colSpan="5">Chargement des résultats...</td>
                 </tr>
               ) : quizAttempts.length === 0 ? (
                 <tr>
-                  <td colSpan="4">Aucune tentative de QCM pour le moment.</td>
+                  <td colSpan="5">Aucune tentative de QCM pour le moment.</td>
                 </tr>
               ) : (
                 quizAttempts.map((attempt) => {
-                  const quizTitle =
-                    attempt.quiz && attempt.quiz.title
-                      ? attempt.quiz.title
-                      : "QCM";
+                  const attemptId = attempt.id || extractIdFromResource(attempt);
+                  const isExpanded = expandedAttempts.has(attemptId);
+                  
+                  // Extraire le titre du QCM - peut être un objet ou une IRI
+                  let quizTitle = "QCM";
+                  if (attempt.quiz) {
+                    if (typeof attempt.quiz === 'object') {
+                      quizTitle = attempt.quiz.title || attempt.quiz["@title"] || "QCM";
+                    } else if (typeof attempt.quiz === 'string') {
+                      // Si c'est une IRI, essayer de charger le quiz
+                      quizTitle = "QCM";
+                    }
+                  }
+                  
+                  // Debug pour voir la structure
+                  if (!quizTitle || quizTitle === "QCM") {
+                    console.log("[QuizAttempt] attempt.quiz:", attempt.quiz);
+                  }
+                  
                   const date = formatDate(attempt.endTimestamp);
                   const score =
                     attempt._computedScore ||
@@ -909,14 +932,114 @@ function Home() {
                     "-";
                   const studentLabel =
                     (currentUser && currentUser.email) || "Vous";
+                  const questionAttempts = attempt.questionAttempts || [];
+
+                  const toggleExpand = (e) => {
+                    e.stopPropagation();
+                    const newExpanded = new Set(expandedAttempts);
+                    if (isExpanded) {
+                      newExpanded.delete(attemptId);
+                    } else {
+                      newExpanded.add(attemptId);
+                    }
+                    setExpandedAttempts(newExpanded);
+                  };
 
                   return (
-                    <tr key={attempt.id || attempt["@id"]}>
-                      <td>{studentLabel}</td>
-                      <td>{quizTitle}</td>
-                      <td>{date}</td>
-                      <td>{score}</td>
-                    </tr>
+                    <React.Fragment key={attemptId}>
+                      <tr 
+                        onClick={toggleExpand}
+                        style={{ cursor: 'pointer' }}
+                        className="table-row-hover"
+                      >
+                        <td onClick={(e) => e.stopPropagation()}>
+                          <span style={{ userSelect: 'none' }}>
+                            {isExpanded ? '▼' : '▶'}
+                          </span>
+                        </td>
+                        <td>{studentLabel}</td>
+                        <td>{quizTitle}</td>
+                        <td>{date}</td>
+                        <td>{score}</td>
+                      </tr>
+                      {isExpanded && (
+                        <tr>
+                          <td colSpan="5" className="p-0">
+                            <div className="p-3 bg-light">
+                              <h6 className="mb-3">Détail des réponses</h6>
+                              {questionAttempts.length === 0 ? (
+                                <p className="text-muted">Aucun détail disponible.</p>
+                              ) : (
+                                <div className="row">
+                                  {questionAttempts.map((qa, index) => {
+                                    const question = qa.question || {};
+                                    // Extraire le contenu de la question - peut être un objet ou une IRI
+                                    let questionContent = "";
+                                    if (question && typeof question === 'object') {
+                                      questionContent = question.content || question["@content"] || "";
+                                    }
+                                    
+                                    // Si le contenu est vide ou semble être juste "Question X", utiliser un placeholder
+                                    if (!questionContent || questionContent.trim() === "" || questionContent.match(/^Question\s+\d+$/i)) {
+                                      questionContent = `Question ${index + 1}`;
+                                    }
+                                    
+                                    const isCorrect = qa.answeredCorrectly === true;
+                                    const responses = question.possibleResponses || question.possible_responses || [];
+                                    
+                                    // Debug pour voir la structure
+                                    if (index === 0) {
+                                      console.log("[QuestionAttempt] question:", question);
+                                      console.log("[QuestionAttempt] questionContent:", questionContent);
+                                      console.log("[QuestionAttempt] responses:", responses);
+                                      responses.forEach((r, i) => {
+                                        console.log(`[QuestionAttempt] Response ${i}:`, r, "is_correct:", r.is_correct, "isCorrect:", r.isCorrect);
+                                      });
+                                    }
+
+                                    return (
+                                      <div key={qa.id || index} className="col-12 mb-3">
+                                        <div className={`card ${isCorrect ? 'border-success' : 'border-danger'}`}>
+                                          <div className="card-body">
+                                            <div className="d-flex align-items-start mb-2">
+                                              <span className={`badge ${isCorrect ? 'bg-success' : 'bg-danger'} me-2`}>
+                                                {isCorrect ? '✓ Correct' : '✗ Incorrect'}
+                                              </span>
+                                              <strong className="flex-grow-1">Question {index + 1}: {questionContent}</strong>
+                                            </div>
+                                            {responses.length > 0 && (
+                                              <div className="mt-2">
+                                                <small className="text-muted">Bonne(s) réponse(s) :</small>
+                                                <ul className="mb-0 mt-1">
+                                                  {responses
+                                                    .filter((response) => {
+                                                      return response.is_correct === true || response.isCorrect === true;
+                                                    })
+                                                    .map((response, respIndex) => {
+                                                      return (
+                                                        <li key={response.id || respIndex} className="text-success fw-bold">
+                                                          {response.content}
+                                                        </li>
+                                                      );
+                                                    })}
+                                                </ul>
+                                                {responses.filter((r) => r.is_correct === true || r.isCorrect === true).length === 0 && (
+                                                  <p className="text-muted mb-0">Aucune bonne réponse trouvée</p>
+                                                )}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   );
                 })
               )}
