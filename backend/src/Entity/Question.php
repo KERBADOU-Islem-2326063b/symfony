@@ -41,7 +41,7 @@ class Question
     /**
      * @var Collection<int, Response>
      */
-    #[ORM\OneToMany(targetEntity: Response::class, mappedBy: 'question', cascade: ['persist'])]
+    #[ORM\OneToMany(targetEntity: Response::class, mappedBy: 'question', cascade: ['persist', 'remove'], orphanRemoval: true)]
     #[Groups(['question:read', 'question:write', 'quiz:read', 'quiz:write', 'questionAttempt:read', 'quizAttempt:read'])]
     private Collection $possible_responses;
 

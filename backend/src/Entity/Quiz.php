@@ -38,7 +38,7 @@ class Quiz
     /**
      * @var Collection<int, Question>
      */
-    #[ORM\OneToMany(targetEntity: Question::class, mappedBy: 'quiz')]
+    #[ORM\OneToMany(targetEntity: Question::class, mappedBy: 'quiz', cascade: ['remove'], orphanRemoval: true)]
     #[Groups(['quiz:read'])]
     private Collection $questions;
 
@@ -53,7 +53,7 @@ class Quiz
     /**
      * @var Collection<int, QuizAttempt>
      */
-    #[ORM\OneToMany(targetEntity: QuizAttempt::class, mappedBy: 'quiz', orphanRemoval: true)]
+    #[ORM\OneToMany(targetEntity: QuizAttempt::class, mappedBy: 'quiz', cascade: ['remove'], orphanRemoval: true)]
     private Collection $quizAttempts;
 
     #[ORM\ManyToOne(inversedBy: 'quiz')]
