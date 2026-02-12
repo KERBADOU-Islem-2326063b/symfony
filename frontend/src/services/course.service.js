@@ -131,6 +131,80 @@ export const uploadCourse = async (name, file) => {
 };
 
 /**
+ * Supprime un cours
+ */
+export const deleteCourse = async (courseId) => {
+  if (!courseId) {
+    return { success: false, error: "ID du cours requis" };
+  }
+
+  try {
+    const response = await fetch(`${API_URL}/courses/${courseId}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+
+    if (response.status === 204 || response.ok) {
+      return { success: true };
+    }
+
+    let error = "Erreur lors de la suppression du cours";
+    try {
+      const data = await response.json();
+      if (data.error) {
+        error = data.error;
+      }
+    } catch (e) {
+      // ignore JSON errors
+    }
+
+    return { success: false, error };
+  } catch (error) {
+    return { success: false, error: "Erreur lors de la suppression du cours" };
+  }
+};
+
+/**
+ * Met à jour le nom d'un cours
+ */
+export const updateCourseName = async (courseId, newName) => {
+  if (!courseId || !newName) {
+    return { success: false, error: "ID du cours et nouveau nom requis" };
+  }
+
+  try {
+    const response = await fetch(`${API_URL}/courses/${courseId}`, {
+      method: "PATCH",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/ld+json",
+        Accept: "application/ld+json",
+      },
+      body: JSON.stringify({ name: newName }),
+    });
+
+    if (response.ok) {
+      const course = await response.json().catch(() => null);
+      return { success: true, course };
+    }
+
+    let error = "Erreur lors de la mise à jour du cours";
+    try {
+      const data = await response.json();
+      if (data.error) {
+        error = data.error;
+      }
+    } catch (e) {
+      // ignore JSON errors
+    }
+
+    return { success: false, error };
+  } catch (error) {
+    return { success: false, error: "Erreur lors de la mise à jour du cours" };
+  }
+};
+
+/**
  * Génère un QCM pour un cours
  */
 export const generateQuizForCourse = async (courseId, numberOfQuestions, allowMultipleChoices = false) => {

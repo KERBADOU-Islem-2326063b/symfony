@@ -38,16 +38,38 @@ final class CourseUploadController extends AbstractController
         $name = $request->request->get('name');
         $file = $request->files->get('file');
 
-        if (!$name) {
-            return new JsonResponse(
-                ['error' => 'name is required'],
-                Response::HTTP_BAD_REQUEST
-            );
-        }
+        // Debug détaillé si name ou file manquent
+        if (!$name || !$file) {
+            $debug = [
+                'has_name_key' => $request->request->has('name'),
+                'name_value' => $request->request->all()['name'] ?? null,
+                'request_fields' => array_keys($request->request->all()),
+                'files_fields' => array_keys($request->files->all()),
+                'content_type' => $request->headers->get('Content-Type'),
+                'content_length' => $request->headers->get('Content-Length'),
+                'method' => $request->getMethod(),
+                'php_limits' => [
+                    'upload_max_filesize' => ini_get('upload_max_filesize'),
+                    'post_max_size' => ini_get('post_max_size'),
+                ],
+            ];
 
-        if (!$file) {
+            if (!$name) {
+                return new JsonResponse(
+                    [
+                        'error' => 'name is required',
+                        'debug' => $debug,
+                    ],
+                    Response::HTTP_BAD_REQUEST
+                );
+            }
+
+            // Ici, name existe mais pas le fichier
             return new JsonResponse(
-                ['error' => 'file is required'],
+                [
+                    'error' => 'file is required',
+                    'debug' => $debug,
+                ],
                 Response::HTTP_BAD_REQUEST
             );
         }

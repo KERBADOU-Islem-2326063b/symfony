@@ -6,6 +6,8 @@ import { API_URL } from "../../services/auth.service";
 import {
   fetchCourses,
   uploadCourse,
+  deleteCourse,
+  updateCourseName,
   generateQuizForCourse,
   loadFullQuiz,
   submitQuizAnswers,
@@ -326,7 +328,15 @@ function Home() {
     const result = await fetchCourses();
     
     if (result.success) {
-      setCourses(result.courses);
+      let loadedCourses = result.courses || [];
+      // Pour un professeur, ne garder que ses propres cours
+      if (role === "ROLE_TEACHER" && currentUserId) {
+        loadedCourses = loadedCourses.filter((course) => {
+          const teacherId = extractIdFromResource(course.teacher);
+          return teacherId && String(teacherId) === String(currentUserId);
+        });
+      }
+      setCourses(loadedCourses);
     } else {
       setCoursesError(result.error || "Erreur lors du chargement des cours");
     }
@@ -390,6 +400,71 @@ function Home() {
     }
 
     setUploadingCourse(false);
+  };
+
+  const handleDeleteCourse = async (course) => {
+    if (!course) return;
+
+    const courseId = course.id || extractIdFromResource(course);
+    if (!courseId) {
+      console.error("[handleDeleteCourse] Impossible d'extraire l'ID du cours:", course);
+      return;
+    }
+
+    // Vérifier que le cours appartient bien au professeur connecté
+    const teacherId = extractIdFromResource(course.teacher);
+    if (teacherId && String(teacherId) !== String(currentUserId)) {
+      alert("Vous ne pouvez supprimer que vos propres cours.");
+      return;
+    }
+
+    if (!window.confirm(`Voulez-vous vraiment supprimer le cours "${course.name}" ?`)) {
+      return;
+    }
+
+    setUploadError("");
+    setUploadSuccess("");
+
+    const result = await deleteCourse(courseId);
+    if (result.success) {
+      setUploadSuccess("Cours supprimé avec succès.");
+      await handleLoadCourses();
+    } else {
+      setUploadError(result.error || "Erreur lors de la suppression du cours.");
+    }
+  };
+
+  const handleRenameCourse = async (course) => {
+    if (!course) return;
+
+    const courseId = course.id || extractIdFromResource(course);
+    if (!courseId) {
+      console.error("[handleRenameCourse] Impossible d'extraire l'ID du cours:", course);
+      return;
+    }
+
+    // Vérifier que le cours appartient bien au professeur connecté
+    const teacherId = extractIdFromResource(course.teacher);
+    if (teacherId && String(teacherId) !== String(currentUserId)) {
+      alert("Vous ne pouvez modifier que vos propres cours.");
+      return;
+    }
+
+    const newName = window.prompt("Nouveau nom du cours :", course.name || "");
+    if (!newName || newName.trim() === "" || newName === course.name) {
+      return;
+    }
+
+    setUploadError("");
+    setUploadSuccess("");
+
+    const result = await updateCourseName(courseId, newName.trim());
+    if (result.success) {
+      setUploadSuccess("Cours mis à jour avec succès.");
+      await handleLoadCourses();
+    } else {
+      setUploadError(result.error || "Erreur lors de la mise à jour du cours.");
+    }
   };
 
   const handleViewCourse = (course) => {
@@ -519,6 +594,18 @@ function Home() {
                                   disabled={!!course.quiz}
                                 >
                                   {course.quiz ? "QCM généré" : "Générer QCM"}
+                                </button>
+                                <button
+                                  className="btn btn-sm btn-outline-secondary"
+                                  onClick={() => handleRenameCourse(course)}
+                                >
+                                  Modifier
+                                </button>
+                                <button
+                                  className="btn btn-sm btn-outline-danger"
+                                  onClick={() => handleDeleteCourse(course)}
+                                >
+                                  Supprimer
                                 </button>
                               </div>
                             </td>
