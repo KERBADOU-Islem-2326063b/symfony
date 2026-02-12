@@ -177,7 +177,8 @@ export const updateCourseName = async (courseId, newName) => {
       method: "PATCH",
       credentials: "include",
       headers: {
-        "Content-Type": "application/ld+json",
+        // API Platform attend par défaut du JSON Merge Patch pour PATCH
+        "Content-Type": "application/merge-patch+json",
         Accept: "application/ld+json",
       },
       body: JSON.stringify({ name: newName }),
