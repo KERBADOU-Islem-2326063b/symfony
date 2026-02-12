@@ -10,11 +10,6 @@
 controllers:
     resource: routing.controllers
 
-course_download:
-    path: /courses/{filename}
-    controller: App\Controller\CourseDownloadController::__invoke
-    methods: GET
-
 course_view:
     path: /courses/{id}/view
     controller: App\Controller\CourseViewController::__invoke
