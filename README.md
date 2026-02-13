@@ -5,6 +5,10 @@ Ce projet est composé de deux parties :
 - **backend** : API Symfony (API Platform) pour gérer les utilisateurs, les cours, les QCM, les tentatives, etc.
 - **frontend** : application React qui consomme l’API et propose l’interface web.
 
+### Lancement du projet
+Pour lancer le projet, il faut lancer l'API et le Frontend séparéments.
+Pour le front, il faut lancer `npm start` dans le dossier `frontend/`. Pour l'API, il faut lancer `symfony serve` dans le dossier `backend/`
+
 ### Gestion des fichiers de cours
 
 - Quand un professeur crée un cours, le **fichier (PDF ou MP4) est stocké localement sur le disque** du backend (dossier de type `var/uploads` via le paramètre `files_directory`).
